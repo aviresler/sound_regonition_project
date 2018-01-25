@@ -75,25 +75,23 @@ class Model(object):
             test_error_rate_list = []
             for fold_index in range(self.conf.k_cross_val):
                 fold_sum = 0
-		print('fold')
-		print(fold_index)
+
                 for mm in range(self.reader.get_valid_length()):
                     (crops_mat, crop_label) = self.reader.get_validation_samples_of_1_input(fold_index, mm)
                     crops_mat = crops_mat.reshape((crops_mat.shape[0], 1, crops_mat.shape[1], 1))
                     feed_dict = {self.net_input: crops_mat, self.label_batch: crop_label, self.keep_prob: 1.0, self.isTrain: False}
                     test_pred = self.sess.run([self.test_prediction], feed_dict=feed_dict)
-		    test_pred = np.squeeze(np.asarray(test_pred))
+                    test_pred = np.squeeze(np.asarray(test_pred))
                     # averaging over 10 predictions to get the final predication of this sample
                     sample_pred = np.average(test_pred, axis=0)
                     if np.argmax(sample_pred) == np.argmax(crop_label[0, :]):
-			
                         fold_sum += 1
                 fold_error_rate =100-100*(fold_sum/self.reader.get_valid_length())
                 print('testing fold {:d} \t error = {:.3f}'.format(fold_index, fold_error_rate))
-		write_log('testing fold {:d} \t error = {:.3f}'.format(fold_index, fold_error_rate), self.conf.logfile)
+                write_log('testing fold {:d} \t error = {:.3f}'.format(fold_index, fold_error_rate), self.conf.logfile)
                 test_error_rate_list.append(fold_error_rate)
             print('total error = {:.3f}'.format(np.array(test_error_rate_list).mean()))
-	    write_log('total error = {:.3f}'.format(np.array(test_error_rate_list).mean()), self.conf.logfile)
+            write_log('total error = {:.3f}'.format(np.array(test_error_rate_list).mean()), self.conf.logfile)
 
 
 
@@ -118,16 +116,12 @@ class Model(object):
             self.epsilon_mat = tf.constant(1e-12, dtype=tf.float32,shape=[self.conf.batch_size, self.conf.num_classes])
 
 
-        #create network
-        if (self.conf.encoder_name == 'DSRNet'):
-            net = DSRNet(self.net_input, self.conf.num_classes, self.isTrain,self.keep_prob)
-            # Trainable Variables
-            all_trainable = tf.trainable_variables()
-            #todo - check if the regularization should be applied on all weights, uncluding fully connected
+        # create network
+        net = DSRNet(self.net_input, self.conf.num_classes, self.isTrain,self.keep_prob)
+        # Trainable Variables
+        all_trainable = tf.trainable_variables()
+        #todo - check if the regularization should be applied on all weights, including fully connected
 
-        else:
-            print('encoder_name ERROR!')
-            sys.exit(-1)
 
         # Network raw output
         logits = net.outputs  # [batch_size, #calses]

@@ -219,8 +219,7 @@ class SoundReaderKCrossValidation(object):
     def get_validation_samples_of_1_input(self, fold_index, offset):
         index = self.cv_index_array[fold_index, offset]
         raw_data = self.data[index, :]
-	
-	raw_data = raw_data.astype(float)
+        raw_data = raw_data.astype(float)
         # normalization between -1 to 1
         raw_data = raw_data / (1 << 15)
 
