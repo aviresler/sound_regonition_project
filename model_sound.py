@@ -26,76 +26,55 @@ class Model(object):
         if self.conf.pretrain_file is not '':
             self.load(self.loader, self.conf.pretrain_file)
 
-        if False == self.conf.is_test_10_crops:
-            for epoch in range(self.conf.num_epochs + 1):
-                epoc_error_rate_list = []
-                start_time = time.time()
-                #k-cross validation
-                for fold_index in range(self.conf.k_cross_val):
-                    train_offset = 0
-                    #runnning on the entire train set
-                    while train_offset < self.reader.get_train_length():
-                        if self.conf.is_between_class_train:
-                            (batch_input, batch_labels) = self.reader.get_batch_bc(fold_index, train_offset, self.conf.batch_size)
-                        else:
-                            (batch_input, batch_labels) = self.reader.get_batch(fold_index, train_offset, self.conf.batch_size)
-                        batch_input = batch_input.reshape((batch_input.shape[0],1,batch_input.shape[1],1))
-                        feed_dict = {self.net_input: batch_input, self.label_batch: batch_labels, self.keep_prob: 0.5, self.curr_step : epoch, self.isTrain: True }
-                        loss_value, _,  pred,lr= self.sess.run([self.reduced_loss, self.train_optimizer, self.test_prediction,self.learning_rate],feed_dict=feed_dict)
-                        if epoch < 5:
-                            print('epoch {:d} \t fold = {:d},loss - {:.3f},'.format(epoch, fold_index,loss_value))
+        curr_valid_fold = self.conf.fold
+        for epoch in range(self.conf.num_epochs + 1):
+            start_time = time.time()
+            train_offset = 0
+            # training
+            while train_offset < self.reader.get_train_length():
+                if self.conf.is_between_class_train:
+                    (batch_input, batch_labels) = self.reader.get_batch_bc(curr_valid_fold, train_offset, self.conf.batch_size)
+                else:
+                    (batch_input, batch_labels) = self.reader.get_batch(curr_valid_fold, train_offset, self.conf.batch_size)
+                batch_input = batch_input.reshape((batch_input.shape[0], 1, batch_input.shape[1], 1))
+                feed_dict = {self.net_input: batch_input, self.label_batch: batch_labels, self.keep_prob: 0.5,self.curr_step: epoch, self.isTrain: True}
+                loss_value, _, pred, lr = self.sess.run([self.reduced_loss, self.train_optimizer, self.test_prediction, self.learning_rate], feed_dict=feed_dict)
+               
 
-                        train_offset = train_offset + self.conf.batch_size
+                train_offset = train_offset + self.conf.batch_size
 
-                    #cross validation
-                    valid_offset = 0
-                    valid_error_rate_list = []
-                    while valid_offset < self.reader.get_valid_length():
-                        (valid_input, valid_labels) = self.reader.get_validation_batch(fold_index,valid_offset,self.conf.valid_batch_size)
-                        valid_input = valid_input.reshape((valid_input.shape[0], 1, valid_input.shape[1], 1))
-                        feed_dict = {self.net_input: valid_input, self.label_batch: valid_labels, self.keep_prob: 1.0,self.isTrain: False}
-                        valid_pred = self.sess.run([self.test_prediction], feed_dict=feed_dict)
-                        valid_pred = np.squeeze(np.asarray(valid_pred))
-                        epoc_error_rate_list.append(self.predictions_error(valid_pred, valid_labels))
-                        valid_error_rate_list.append(self.predictions_error(valid_pred, valid_labels))
-                        valid_offset = valid_offset + self.conf.valid_batch_size
-                    if epoch < 5:
-                        print('fold validattion error')
-                        print(np.array(valid_error_rate_list).mean())
+            # validation
+            valid_offset = 0
+            error_sum = 0
+            while valid_offset < self.reader.get_valid_length():
+                (valid_input, valid_labels) = self.reader.get_validation_batch_10_crops(curr_valid_fold, valid_offset, self.conf.valid_batch_size)
+                valid_input = valid_input.reshape((valid_input.shape[0], 1, valid_input.shape[1], 1))
+                feed_dict = {self.net_input: valid_input, self.label_batch: valid_labels, self.keep_prob: 1.0, self.isTrain: False}
+                valid_pred = self.sess.run([self.test_prediction], feed_dict=feed_dict)
+                valid_pred = np.squeeze(np.asarray(valid_pred))
 
-                mean_error = np.array(epoc_error_rate_list).mean()
-                duration = time.time() - start_time
-                print('step {:d} \t loss = {:.3f},mean_error = {:.3f}, ({:.3f} sec/step)'.format(epoch, loss_value, mean_error, duration))
-                write_log('{:d}, {:.3f}, {:.3f}'.format(epoch, loss_value, mean_error), self.conf.logfile)
-                if epoch > 0:
-                    if epoch % self.conf.save_interval == 0:
-                        self.save(self.saver, epoch)
-        else:
-            # testing on 10 crops of each sample
-            test_error_rate_list = []
-            for fold_index in range(self.conf.k_cross_val):
-                fold_sum = 0
+                # averaging over 10 rows
+                # averaging over 10 predictions to get the final predication of this sample
+                valid_batch_pred_mat = np.zeros((self.conf.valid_batch_size, self.conf.num_classes))
+                valid_batch_labels = np.zeros((self.conf.valid_batch_size, self.conf.num_classes))
+                for mm in range(self.conf.valid_batch_size):
+                    crop = valid_pred[mm*self.conf.num_of_valid_crop:(mm+1)*self.conf.num_of_valid_crop, :]
+                    valid_batch_pred_mat[mm, :] = np.average(crop, axis=0)
+                    valid_batch_labels[mm, :] = valid_labels[mm*self.conf.num_of_valid_crop, :]
 
-                for mm in range(self.reader.get_valid_length()):
-                    (crops_mat, crop_label) = self.reader.get_validation_samples_of_1_input(fold_index, mm)
-                    crops_mat = crops_mat.reshape((crops_mat.shape[0], 1, crops_mat.shape[1], 1))
-                    feed_dict = {self.net_input: crops_mat, self.label_batch: crop_label, self.keep_prob: 1.0, self.isTrain: False}
-                    test_pred = self.sess.run([self.test_prediction], feed_dict=feed_dict)
-                    test_pred = np.squeeze(np.asarray(test_pred))
-                    # averaging over 10 predictions to get the final predication of this sample
-                    sample_pred = np.average(test_pred, axis=0)
-                    if np.argmax(sample_pred) == np.argmax(crop_label[0, :]):
-                        fold_sum += 1
-                fold_error_rate =100-100*(fold_sum/self.reader.get_valid_length())
-                print('testing fold {:d} \t error = {:.3f}'.format(fold_index, fold_error_rate))
-                write_log('testing fold {:d} \t error = {:.3f}'.format(fold_index, fold_error_rate), self.conf.logfile)
-                test_error_rate_list.append(fold_error_rate)
-            print('total error = {:.3f}'.format(np.array(test_error_rate_list).mean()))
-            write_log('total error = {:.3f}'.format(np.array(test_error_rate_list).mean()), self.conf.logfile)
+                error_sum = error_sum + np.sum(np.argmax(valid_batch_pred_mat, 1) != np.argmax(valid_batch_labels, 1))
+                valid_offset = valid_offset + self.conf.valid_batch_size
 
+            valid_error = 100 * (error_sum/self.reader.get_valid_length())
 
-
-
+            duration = time.time() - start_time
+            epoch_str = 'epoch {:d} \t loss = {:.3f}, valid_err = {:.3f}, fold = {:d}, is_bc = {}, duration = {:.3f}, lr = {:.5f}'.format(epoch, loss_value, valid_error, curr_valid_fold, self.conf.is_between_class_train, duration,lr)
+            print(epoch_str)
+            write_log(epoch_str, 'fold' + str(curr_valid_fold) + '_bc_' + str(self.conf.is_between_class_train) + '_' + self.conf.logfile )
+            # saving model of needed
+            if epoch > 0:
+                if epoch % self.conf.save_interval == 0:
+                    self.save(self.saver, epoch)
 
     def setup(self):
         tf.set_random_seed(self.conf.random_seed)
@@ -153,7 +132,7 @@ class Model(object):
             self.train_optimizer = optimizer.minimize(self.reduced_loss)
 
         # Saver for storing checkpoints of the model
-        self.saver = tf.train.Saver(var_list=tf.global_variables())
+        self.saver = tf.train.Saver(var_list=tf.global_variables(), max_to_keep= 1)
 
         # Loader for loading the pre-trained model
         self.loader = tf.train.Saver(var_list=tf.global_variables())
@@ -170,7 +149,7 @@ class Model(object):
         Save weights.
         '''
         model_name = 'model.ckpt'
-        checkpoint_path = os.path.join(self.conf.modeldir, model_name)
+        checkpoint_path = os.path.join(self.conf.modeldir + '_' + str(self.conf.fold) + '_bc_' + str(self.conf.is_between_class_train), model_name)
         if not os.path.exists(self.conf.modeldir):
             os.makedirs(self.conf.modeldir)
         saver.save(self.sess, checkpoint_path, global_step=step)
