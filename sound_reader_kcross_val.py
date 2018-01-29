@@ -28,11 +28,6 @@ def read_from_disk(data_dir, data_list):
             labels.append(int(row['target']))
             is_esc10.append(row['esc10'])
             [_, data] = scipy.io.wavfile.read(data_dir + row['filename'])
-            # conversion to float
-            # remove 0 from start/end
-            #data = np.trim_zeros(data)
-            # pad with T/2 zeros from start&end
-           # data = np.pad(data, (zero_padding, zero_padding), 'constant', constant_values=(0, 0))
             out_array[count, :] = data
             count = count + 1
 
@@ -112,7 +107,7 @@ def preprocess_base_valid_data_for_1_signal(self, signal, input_size, num_valid_
         trimmed_signal_zero_padded = np.pad(trimmed_signal, (zero_padding, zero_padding), 'constant',
                                             constant_values=(0, 0))
 
-        #cropping indecies
+        # cropping indecies
         L = trimmed_signal_zero_padded.size
         valid_stride = int((L - input_size) / (num_valid_section - 1))
         crop_indecies = range(0, L - input_size + 1, valid_stride)
@@ -248,9 +243,6 @@ class SoundReaderKCrossValidation(object):
         return out_data, one_hot_label
 
 
-
-
-
     def get_validation_batch(self, fold_index, offset, batch_size):
         start_index = self.cv_index_array[fold_index, offset]
         end_index = self.cv_index_array[fold_index, offset + batch_size-1] + 1
@@ -331,8 +323,8 @@ class SoundReaderKCrossValidation(object):
         y = lfilter(b, a, data_padded_reshaped, axis= 1)
         G_vec = np.max(np.max(y,1),1)
 
-        G1_vec = G_vec[permuation1]
-        G2_vec = G_vec[permuation2]
+        G1_vec = 20*np.log10(1e-12+G_vec[permuation1])
+        G2_vec = 20*np.log10(1e-12+G_vec[permuation2])
 
         p_denominator = 1 + ((1 - r_vec) / r_vec) * np.power(10, (G1_vec - G2_vec) / 20)
         p_vec = 1/p_denominator
