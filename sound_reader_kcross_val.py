@@ -124,7 +124,7 @@ def preprocess_base_valid_data_for_1_signal(self, signal, input_size, num_valid_
         return out_array
 
 
-def preprocess_base_valid_data_for_fold(self, signal, input_size, num_valid_section):
+def preprocess_base_valid_data_for_fold(signal, input_size, num_valid_section):
     """receives 1 inputs signal, and does the following preprocess steps:
     1. trim zeros for start/end of the file
     2. zero padding on both sides, with required_size/2 zeros
@@ -152,6 +152,8 @@ def preprocess_base_valid_data_for_fold(self, signal, input_size, num_valid_sect
         out_array[m, :] = trimmed_signal_zero_padded[crop_indecies[m]:crop_indecies[m] + input_size]
 
     return out_array
+
+
 
 
 
@@ -223,7 +225,8 @@ class SoundReaderKCrossValidation(object):
         # normalization between -1 to 1
         raw_data = raw_data / (1 << 15)
 
-        out_mat = preprocess_base_valid_data_for_1_signal(self, raw_data, self.requierd_input_size, self.num_valid_section)
+        out_mat = preprocess_base_valid_data_for_1_signal(self, raw_data, self.requierd_input_size,
+                                                          self.num_valid_section)
 
         # one hot encoding
         indecies = np.arange(self.num_valid_section)
@@ -231,6 +234,22 @@ class SoundReaderKCrossValidation(object):
         one_hot_label[indecies, self.labels[index]] = 1
 
         return out_mat, one_hot_label
+
+
+
+    def get_validation_batch_10_crops(self, fold_index, offset, batch_size):
+        out_data = np.zeros((batch_size*self.num_valid_section, self.requierd_input_size))
+        one_hot_label = np.zeros((batch_size*self.num_valid_section, self.number_of_classes))
+
+        for m in range(batch_size):
+            data, label = self.get_validation_samples_of_1_input(fold_index, offset + m)
+            out_data[m*self.num_valid_section:(m+1)*self.num_valid_section, :] = data
+            one_hot_label[m*self.num_valid_section:(m+1)*self.num_valid_section, :] = label
+        return out_data, one_hot_label
+
+
+
+
 
     def get_validation_batch(self, fold_index, offset, batch_size):
         start_index = self.cv_index_array[fold_index, offset]
