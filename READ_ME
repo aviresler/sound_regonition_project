@@ -1,0 +1,9 @@
+-----ICLR 2018 reproducibility challenge-----
+This project tries to reproduce the results that were written in the following paper: “Learning from Between-Class examples for deep sound recognition”.
+It implements DSRNet (aka EnvNet v2) on ESC-50 dataset (https://github.com/karoldvl/ESC-50),
+with 2 learning approaches: standard and between 2 classes.
+The models run in a 5 folds cross validation manner, according to the split in ESC-50 database.
+In order to run the project, the dataset directory should be placed at the same location of the project files. 
+Running of the standard model is done by activating “run_me.py”, to run BC model, use “run_me_bc.py”. 
+You can edit  run parameters in these files, please note that you need to specify the current fold that is used for validation (number between 0-4). The rest of the data will be used for training.
+Run log will be saved in “fold<fold#>_bc_<True/False>_log.txt file”. Model will be saved every 50 epochs in “model_<fold#>_bc_<True/False>” folder. 
